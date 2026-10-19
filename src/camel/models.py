@@ -57,6 +57,15 @@ _SECURITY_POLICY_ENGINES: dict[str, type[AgentDojoSecurityPolicyEngine]] = {
     "travel": TravelSecurityPolicyEngine,
     "banking": BankingSecurityPolicyEngine,
     "slack": SlackSecurityPolicyEngine,
+    # Both repair actions are intentionally permitted in this experimental suite.
+    "redteaming": ADNoSecurityPolicyEngine,
+    # Stage one defines the simulated environment; a reader-aware policy engine
+    # will be added separately for policy-replay experiments.
+    "external_email": ADNoSecurityPolicyEngine,
+    "external_email_conditioned": ADNoSecurityPolicyEngine,
+    "enterprise_accounts_payable": ADNoSecurityPolicyEngine,
+    # Composite policy semantics will be defined when BSTW receives tasks.
+    "bstw": ADNoSecurityPolicyEngine,
 }
 
 
@@ -96,6 +105,8 @@ def make_tools_pipeline(
     ad_defense: str | None,
     eval_mode: MetadataEvalMode,
     q_llm: KnownModelName | None,
+    max_attempts: int = 10,
+    quarantined_llm_retries: int = 10,
 ) -> agent_pipeline.AgentPipeline:
     if "google" in model:
         # vertexai.init(project=os.getenv("GCP_PROJECT"), location=os.getenv("GCP_LOCATION"))
@@ -198,6 +209,8 @@ def make_tools_pipeline(
                     llm,
                     ADNoSecurityPolicyEngine,
                     q_llm or model,
+                    max_attempts=max_attempts,
+                    quarantined_llm_retries=quarantined_llm_retries,
                 ),
             ]
         )

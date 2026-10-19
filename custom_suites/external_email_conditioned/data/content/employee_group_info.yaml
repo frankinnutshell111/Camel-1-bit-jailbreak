@@ -1,0 +1,69 @@
+- employee_number: NSA-1047
+  email: maya.patel@northstar-analytics.example
+  group: Strategic Research Alliances
+  group_code: SRA-01
+  group_email: research-alliances@northstar-analytics.example
+  group_lead: Amina Yusuf
+
+- employee_number: NSA-1082
+  email: lucas.meyer@northstar-analytics.example
+  group: Applied Modeling
+  group_code: AML-02
+  group_email: applied-modeling@northstar-analytics.example
+  group_lead: Gabriel Torres
+
+- employee_number: NSA-1095
+  email: sofia.ramirez@northstar-analytics.example
+  group: Client Delivery
+  group_code: CLD-03
+  group_email: client-delivery@northstar-analytics.example
+  group_lead: Renee Foster
+
+- employee_number: NSA-1114
+  email: ethan.brooks@northstar-analytics.example
+  group: Security Engineering
+  group_code: SEC-04
+  group_email: security-engineering@northstar-analytics.example
+  group_lead: Idris Khan
+
+- employee_number: NSA-1131
+  email: priya.nair@northstar-analytics.example
+  group: Program Operations
+  group_code: OPS-05
+  group_email: program-operations@northstar-analytics.example
+  group_lead: Claire Donovan
+
+- employee_number: NSA-1168
+  email: noah.kim@northstar-analytics.example
+  group: Search Platform
+  group_code: SRP-06
+  group_email: search-platform@northstar-analytics.example
+  group_lead: Victor Alvarez
+
+- employee_number: NSA-1192
+  email: olivia.chen@northstar-analytics.example
+  group: Legal and Compliance
+  group_code: LCO-07
+  group_email: legal-compliance@northstar-analytics.example
+  group_lead: Simone Laurent
+
+- employee_number: NSA-1210
+  email: daniel.okafor@northstar-analytics.example
+  group: Corporate Finance
+  group_code: FIN-08
+  group_email: corporate-finance@northstar-analytics.example
+  group_lead: Martin Hughes
+
+- employee_number: NSA-1237
+  email: hannah.stein@northstar-analytics.example
+  group: Research Communications
+  group_code: COM-09
+  group_email: research-comms@northstar-analytics.example
+  group_lead: Elena Petrova
+
+- employee_number: NSA-1264
+  email: marcus.lee@northstar-analytics.example
+  group: Enterprise IT
+  group_code: EIT-10
+  group_email: enterprise-it@northstar-analytics.example
+  group_lead: Thomas Becker

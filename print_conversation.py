@@ -21,6 +21,71 @@ from rich.syntax import Syntax
 from rich.text import Text
 
 
+def content_to_text(content):
+    """Normalize AgentDojo message content into displayable plain text."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(filter(None, (content_to_text(block) for block in content)))
+    if isinstance(content, dict):
+        for key in ("content", "text"):
+            if key in content:
+                return content_to_text(content[key])
+        return json.dumps(content, ensure_ascii=False, default=str)
+    return str(content)
+
+
+def is_interpreter_error_message(message):
+    """Return whether a message is CaMeL's synthetic interpreter-error prompt."""
+    return message.get("role") == "user" and content_to_text(message.get("content", "")).lstrip().startswith(
+        "Running the code gave the following error:"
+    )
+
+
+def messages_in_chronological_order(messages):
+    """Repair the display order of tool results from failed CaMeL attempts.
+
+    Failed attempts are serialized as ``tool results -> assistant plan -> user
+    error``. The plan was actually generated before those tools executed. This
+    function repairs that ordering for display without modifying the trace.
+    """
+    reordered = []
+    segment_start = 0
+
+    for error_index, message in enumerate(messages):
+        if not is_interpreter_error_message(message):
+            continue
+
+        segment = messages[segment_start:error_index]
+        last_user_index = max(
+            (index for index, item in enumerate(segment) if item.get("role") == "user"),
+            default=-1,
+        )
+        leading_messages = segment[: last_user_index + 1]
+        attempt_messages = segment[last_user_index + 1 :]
+        assistant_index = next(
+            (index for index, item in enumerate(attempt_messages) if item.get("role") == "assistant"),
+            None,
+        )
+
+        if assistant_index is not None and any(
+            item.get("role") == "tool" for item in attempt_messages[:assistant_index]
+        ):
+            attempt_messages = [
+                attempt_messages[assistant_index],
+                *attempt_messages[:assistant_index],
+                *attempt_messages[assistant_index + 1 :],
+            ]
+
+        reordered.extend([*leading_messages, *attempt_messages, message])
+        segment_start = error_index + 1
+
+    reordered.extend(messages[segment_start:])
+    return reordered
+
+
 def print_conversation_from_json(json_file_path):
     """
     Prints the conversation from a JSON file in a nice format using rich.
@@ -65,20 +130,21 @@ def print_conversation_from_json(json_file_path):
 
         console.rule(f"[bold blue]Conversation: {suite_name} | {pipeline_name} | {user_task_id}[/bold blue]")
 
-        for message in data.get("messages", []):
+        messages = messages_in_chronological_order(data.get("messages", []))
+        for message in messages:
             role = message.get("role")
-            content = message.get("content", "")
+            content = content_to_text(message.get("content", ""))
 
             if role == "user":
                 role_text = Text("User", style="bold blue")
-                panel_content = Text.from_markup(content)
+                panel_content = Text(content)
 
             elif role == "assistant":
                 role_text = Text("Assistant", style="bold green")
                 panel_elements = []
                 parts = content.split("```python")  # Split by python code blocks
 
-                panel_elements.append(Text.from_markup(parts[0]))  # Add text before first code block
+                panel_elements.append(Text(parts[0]))  # Add text before first code block
 
                 for i in range(1, len(parts)):
                     code_block_parts = parts[i].split("```")  # Split code block part by closing backticks
@@ -86,7 +152,7 @@ def print_conversation_from_json(json_file_path):
                     syntax = Syntax(code, "python", theme="monokai", line_numbers=False, word_wrap=True)
                     panel_elements.append(syntax)  # Append the Syntax object directly
                     if len(code_block_parts) > 1:  # Add text after code block if any
-                        panel_elements.append(Text.from_markup(code_block_parts[1]))
+                        panel_elements.append(Text(code_block_parts[1]))
                     else:
                         panel_elements.append(Text(""))  # Add empty text if no text after code block
 
@@ -94,10 +160,10 @@ def print_conversation_from_json(json_file_path):
 
             elif role == "tool":
                 role_text = Text(f"Tool - {message['tool_call']['function']}", style="bold magenta")
-                panel_content = Text.from_markup(content)
+                panel_content = Text(content)
             else:
                 role_text = Text(role.capitalize(), style="bold yellow")
-                panel_content = Text.from_markup(content)
+                panel_content = Text(content)
 
             panel = Panel(
                 panel_content,  # Pass panel_content (which is now a Group)

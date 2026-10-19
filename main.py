@@ -20,8 +20,14 @@ from agentdojo.task_suite import get_suite
 from openai.types.chat import ChatCompletionReasoningEffort
 
 import camel.custom_yaml  # noqa
+import custom_suites.bstw as _bstw  # noqa: F401 - Register aggregate suite.
+import custom_suites.enterprise_accounts_payable as _enterprise_accounts_payable  # noqa: F401
+import custom_suites.external_email as _external_email  # noqa: F401 - Register suite and attack.
+import custom_suites.external_email_conditioned as _external_email_conditioned  # noqa: F401
+import custom_suites.repair_database as _repair_database  # noqa: F401 - Register suite.
 from camel.interpreter.interpreter import MetadataEvalMode
 from camel.models import make_tools_pipeline
+from custom_tasks.workspace import register_custom_tasks
 
 
 def main(
@@ -36,6 +42,10 @@ def main(
     eval_mode: MetadataEvalMode = MetadataEvalMode.NORMAL,
     q_llm: str | None = None,
     user_tasks: list[str] | None = None,
+    injection_tasks: list[str] | None = None,
+    force_rerun: bool = False,
+    max_attempts: int = 10,
+    quarantined_llm_retries: int = 10,
 ):
     """Example usage of the defense.
 
@@ -49,21 +59,30 @@ def main(
         thinking_budget_tokens: how many tokens Anthropic reasoning models can use. Note that Anthropic reasoning models are not supported yet.
         ad_defense: whether to use a defense from AgentDojo and which one. It must be used in conjunction with `--use-original`.
             Tested defenses are "tool_filter", "repeat_user_prompt", "spotlight_with_delimiting"
-        run_attack: whether to run the attack (it uses AgentDojo's `important_instructions` attack)
+        run_attack: whether to run an attack. External email uses its condition-specific attack; other suites use `important_instructions`.
         replay_with_policies: replay the run with the given model enforcing security policies. Note that the equivalent run (with same model and attack config)
             should have already been run.
-        suites: which suites to run AgentDojo on (can be a list from `["workspace", "banking", "travel", "slack"]`)
+        suites: which suites to run AgentDojo on (including `bstw` and `enterprise_accounts_payable`)
         eval_mode: which eval mode to use when propagating dependencies.
         q_llm: what model to use as a quarantined llm. If None, the same as `model` is used.
+        user_tasks: optional subset of user-task IDs to run.
+        injection_tasks: optional subset of injection-task IDs to run.
+        force_rerun: rerun selected tasks even if matching log files already exist.
+        max_attempts: maximum number of total P-LLM plan attempts, including the initial plan.
+        quarantined_llm_retries: structured-output retry budget within each Q-LLM call.
     """
-
-    attack_name = "important_instructions"
 
     suites = suites or ["workspace", "banking", "travel", "slack"]
     total_utility_results = []
     total_security_results = []
     logdir = Path("./logs")
     for suite_name in suites:
+        attack_name = {
+            "bstw": "bstw_vendorx_fallback",
+            "enterprise_accounts_payable": "enterprise_accounts_payable_conditions",
+            "external_email": "external_email_conditions",
+            "external_email_conditioned": "external_email_conditioned_conditions",
+        }.get(suite_name, "important_instructions")
         tools_pipeline = make_tools_pipeline(
             model,  # type: ignore
             use_original,
@@ -75,8 +94,12 @@ def main(
             ad_defense,
             eval_mode,
             q_llm,  # type: ignore
+            max_attempts,
+            quarantined_llm_retries,
         )
         suite = get_suite("v1.2", suite_name)
+        if suite_name == "workspace":
+            register_custom_tasks(suite)
         attack = attacks.load_attack(attack_name, suite, tools_pipeline)
         with logging.OutputLogger(str(logdir)):
             if run_attack:
@@ -85,15 +108,16 @@ def main(
                     suite,
                     attack,
                     logdir,
-                    force_rerun=False,
+                    force_rerun=force_rerun,
                     user_tasks=user_tasks,
+                    injection_tasks=injection_tasks,
                 )
             else:
                 results = benchmark.benchmark_suite_without_injections(
                     tools_pipeline,
                     suite,
                     logdir,
-                    force_rerun=False,
+                    force_rerun=force_rerun,
                     user_tasks=user_tasks,
                 )
 

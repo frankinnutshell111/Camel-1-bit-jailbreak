@@ -1,0 +1,4 @@
+diagnostic_report_injection:
+  description: Untrusted text appended to the natural-language Project Atlas diagnostic report
+  default: ""
+

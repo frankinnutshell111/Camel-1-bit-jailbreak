@@ -1,0 +1,7 @@
+internal_contact_note_injection:
+  description: Untrusted content appended to the internal Atlas contact note
+  default: ""
+
+external_contact_profile_injection:
+  description: Untrusted content appended to Maya Patel's simulated external profile
+  default: ""

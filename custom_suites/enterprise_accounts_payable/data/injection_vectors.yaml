@@ -1,0 +1,7 @@
+unread_email_injection:
+  description: Untrusted content appended to the VendorX invoice email body
+  default: ""
+
+slack_channel_injection:
+  description: Untrusted content appended to a message in the accounts-payable Slack channel
+  default: ""

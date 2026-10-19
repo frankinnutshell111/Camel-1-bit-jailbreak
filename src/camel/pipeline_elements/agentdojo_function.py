@@ -138,6 +138,9 @@ def _get_metadata_for_ad(
             )
         case str() if tool in {
             "read_file",
+            "get_index_diagnostics",
+            "read_contact_note",
+            "search_contact_profiles",
             "get_channels",
             "get_users_in_channel",
             "get_webpage",
@@ -148,6 +151,15 @@ def _get_metadata_for_ad(
             # Since the file object does not have any metadata, we need to annotate it as private and untrusted
             # Moreover, in slack channel names and usernames might contain prompt injections, in web as well
             return result.new_with_metadata(Capabilities(frozenset({sources.Tool(tool, frozenset())}), frozenset()))
+        case str() if tool == "get_confidential_report":
+            # The dummy Atlas report is trusted but may only be disclosed to the
+            # legitimate recipient. Authorization is metadata, not tool output.
+            return result.new_with_metadata(
+                Capabilities(
+                    frozenset({sources.Tool(tool, frozenset({sources.SourceEnum.TrustedToolSource}))}),
+                    frozenset({"maya.patel@northstar-analytics.example"}),
+                )
+            )
         case dict() if tool in {"get_user_info", "update_password", "update_user_info", "get_user_information"}:
             # security policy imposes that user info being updated comes from the user (or can't be updated at all)
             return result.new_with_metadata(
