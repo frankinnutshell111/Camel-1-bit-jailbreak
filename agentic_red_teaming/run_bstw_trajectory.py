@@ -13,6 +13,7 @@ from agentdojo.types import ChatMessage, get_text_content_as_str
 from pydantic_ai.models import KnownModelName
 
 from agentic_red_teaming.resources import ResourceType
+from camel.api_control import fail_fast_agentdojo_api_requests
 
 if TYPE_CHECKING:
     from agentic_red_teaming.graph import (
@@ -142,16 +143,17 @@ def run_camel_query(
         quarantined_llm_retries=config.quarantined_llm_retries,
     )
     runtime = FunctionsRuntime(task_suite.tools)
-    try:
-        _, _, _, messages, _ = pipeline.query(
-            query,
-            runtime,
-            attacked_environment,
-            messages=[],
-            extra_args={},
-        )
-    except AbortAgentError as exc:
-        messages = exc.messages
+    with fail_fast_agentdojo_api_requests():
+        try:
+            _, _, _, messages, _ = pipeline.query(
+                query,
+                runtime,
+                attacked_environment,
+                messages=[],
+                extra_args={},
+            )
+        except AbortAgentError as exc:
+            messages = exc.messages
     return tuple(messages)
 
 

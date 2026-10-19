@@ -30,6 +30,7 @@ import pydantic_ai
 from pydantic.fields import Field, FieldInfo
 
 from camel import security_policy
+from camel.api_control import is_model_api_error
 from camel.capabilities import Capabilities
 from camel.capabilities.readers import Public
 from camel.capabilities.sources import Tool
@@ -2070,6 +2071,11 @@ def _eval_call(
     try:
         ret_res, args_by_keyword = evaled_fn.call(evaled_args, evaled_kwargs, namespace)
     except Exception as e:
+        if evaled_fn.name().raw == "query_ai_assistant" and is_model_api_error(e):
+            # Provider failures are infrastructure failures, not plan mistakes.
+            # Let the experiment runner terminate instead of asking the P-LLM
+            # to revise its code and multiplying the failing API request.
+            raise
         if isinstance(e, NotEnoughInformationError) or (
             isinstance(e, pydantic_ai.UnexpectedModelBehavior) and "Exceeded maximum retries" in str(e)
         ):

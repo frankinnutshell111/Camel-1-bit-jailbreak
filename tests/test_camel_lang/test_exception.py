@@ -14,7 +14,11 @@
 
 import ast
 
-from camel.interpreter import interpreter, result
+import pytest
+from pydantic_ai import ModelHTTPError
+
+from camel.capabilities import Capabilities
+from camel.interpreter import interpreter, result, value
 from camel.interpreter import namespace as ns
 from camel.security_policy import NoSecurityPolicyEngine
 
@@ -33,3 +37,61 @@ def test_exception():
     assert ValueError == type(got_code.error.exception)
     assert "Error!" == str(got_code.error.exception)
     assert got_namespace == namespace
+
+
+def test_qllm_api_error_escapes_interpreter() -> None:
+    def query_ai_assistant() -> str:
+        raise ModelHTTPError(429, "gpt-test", {"error": "quota exceeded"})
+
+    namespace = ns.Namespace(
+        {
+            "query_ai_assistant": value.CaMeLBuiltin(
+                "query_ai_assistant",
+                query_ai_assistant,
+                Capabilities.camel(),
+                (),
+            )
+        }
+    )
+
+    with pytest.raises(ModelHTTPError, match="status_code: 429"):
+        interpreter.camel_eval(
+            ast.parse("query_ai_assistant()"),
+            namespace,
+            [],
+            [],
+            interpreter.EvalArgs(
+                NoSecurityPolicyEngine(),
+                interpreter.MetadataEvalMode.NORMAL,
+            ),
+        )
+
+
+def test_non_api_tool_error_remains_an_interpreter_error() -> None:
+    def query_ai_assistant() -> str:
+        raise ValueError("invalid output schema")
+
+    namespace = ns.Namespace(
+        {
+            "query_ai_assistant": value.CaMeLBuiltin(
+                "query_ai_assistant",
+                query_ai_assistant,
+                Capabilities.camel(),
+                (),
+            )
+        }
+    )
+
+    evaluation, _, _, _ = interpreter.camel_eval(
+        ast.parse("query_ai_assistant()"),
+        namespace,
+        [],
+        [],
+        interpreter.EvalArgs(
+            NoSecurityPolicyEngine(),
+            interpreter.MetadataEvalMode.NORMAL,
+        ),
+    )
+
+    assert isinstance(evaluation, result.Error)
+    assert isinstance(evaluation.error.exception, ValueError)

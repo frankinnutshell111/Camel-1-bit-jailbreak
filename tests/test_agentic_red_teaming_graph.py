@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from agentdojo.functions_runtime import FunctionCall
+from pydantic_ai import ModelHTTPError
 
 from agentic_red_teaming.graph import (
     GeneratedInjectionTask,
@@ -270,3 +272,36 @@ def test_num_retries_remains_a_sampling_size_alias() -> None:
     )
 
     assert config.effective_sampling_size == 4
+
+
+def test_graph_stops_immediately_when_trajectory_api_call_fails(monkeypatch, tmp_path) -> None:
+    run_count = 0
+
+    def fake_generate(_config, *, diversity_index, previous_queries):
+        return _user_task(diversity_index)
+
+    def fake_select(_ground_truth, _config):
+        return _injection_task(0)
+
+    def failing_run(*_args, **_kwargs):
+        nonlocal run_count
+        run_count += 1
+        raise ModelHTTPError(429, "gpt-test", {"error": "quota exceeded"})
+
+    def unexpected_evaluation(*_args, **_kwargs):
+        raise AssertionError("Evaluation must not run after an API failure")
+
+    monkeypatch.setattr("agentic_red_teaming.graph.task_generator_agent", fake_generate)
+    monkeypatch.setattr("agentic_red_teaming.graph.select_injection_targets", fake_select)
+    monkeypatch.setattr("agentic_red_teaming.graph.run_bstw_trajectory", failing_run)
+    monkeypatch.setattr("agentic_red_teaming.graph.evaluate_trajectory", unexpected_evaluation)
+
+    config = _config(
+        number_of_tasks=1,
+        sampling_size=3,
+        log_directory=str(tmp_path / "logs"),
+    )
+    with pytest.raises(ModelHTTPError, match="status_code: 429"):
+        run_red_teaming_graph(config)
+
+    assert run_count == 1

@@ -19,6 +19,8 @@ import pydantic_ai
 from pydantic import BaseModel, Field, create_model
 from pydantic_ai import models
 
+from camel.api_control import make_fail_fast_pydantic_model
+
 _T = TypeVar("_T")
 
 
@@ -88,7 +90,8 @@ def query_quarantined_llm(
             output=(output_schema, Field(description="The requested value")),
             have_enough_information=enough_information,
         )
-    model = pydantic_ai.Agent(llm, result_type=output_model, retries=retries, system_prompt=_SYSTEM_PROMPT)
+    resolved_llm = make_fail_fast_pydantic_model(llm) if isinstance(llm, str) else llm
+    model = pydantic_ai.Agent(resolved_llm, result_type=output_model, retries=retries, system_prompt=_SYSTEM_PROMPT)
 
     res = model.run_sync(query).data
 

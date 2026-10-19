@@ -7,9 +7,11 @@ from agentdojo import agent_pipeline, functions_runtime
 from agentdojo.agent_pipeline.agent_pipeline import load_system_message
 from agentdojo.models import MODEL_NAMES
 from google import genai
+from google.genai import types as genai_types
 from openai.types.chat import ChatCompletionReasoningEffort
 from pydantic_ai.models import KnownModelName
 
+from camel.api_control import API_TIMEOUT_SECONDS
 from camel.interpreter.interpreter import MetadataEvalMode
 from camel.pipeline_elements.anthropic_tool_filter import AnthropicLLMToolFilter
 from camel.pipeline_elements.privileged_llm import PrivilegedLLM
@@ -112,21 +114,32 @@ def make_tools_pipeline(
         # vertexai.init(project=os.getenv("GCP_PROJECT"), location=os.getenv("GCP_LOCATION"))
         # llm = GoogleLLM(model.split(":")[1])
         # client = genai.Client(vertexai=True, project=os.getenv("GCP_PROJECT"), location=os.getenv("GCP_LOCATION"))
-        client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+        client = genai.Client(
+            api_key=os.getenv("GOOGLE_API_KEY"),
+            http_options=genai_types.HttpOptions(timeout=int(API_TIMEOUT_SECONDS * 1000)),
+        )
         if model == "google:gemini-2.0-flash-lite-001":
             max_tokens = 8192
         else:
             max_tokens = 65535
         llm = agent_pipeline.GoogleLLM(model.split(":")[1], client, max_tokens=max_tokens)
     elif "openai" in model:
-        client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        client = openai.OpenAI(
+            api_key=os.getenv("OPENAI_API_KEY"),
+            max_retries=0,
+            timeout=API_TIMEOUT_SECONDS,
+        )
         # reasoning models do not support temperature and their "system" message is called "developer" message
         if _is_oai_reasoning_model(model):
             llm = agent_pipeline.OpenAILLM(client, model.split(":")[1], reasoning_effort, None)
         else:
             llm = agent_pipeline.OpenAILLM(client, model.split(":")[1], None)
     elif "anthropic" in model:
-        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        client = anthropic.Anthropic(
+            api_key=os.getenv("ANTHROPIC_API_KEY"),
+            max_retries=0,
+            timeout=API_TIMEOUT_SECONDS,
+        )
         if thinking_budget_tokens:
             max_tokens = 8192 + thinking_budget_tokens
         else:
