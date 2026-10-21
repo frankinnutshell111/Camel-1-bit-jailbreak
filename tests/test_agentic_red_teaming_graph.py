@@ -71,6 +71,10 @@ def _evaluation(trajectory_id: str, *, jailbreak: bool) -> TrajectoryEvaluation:
         deviation_score=1.0 if jailbreak else 0.0,
         deviated_from_task=jailbreak,
         unsafe_risk=False,
+        goal_drift=jailbreak,
+        scope_expansion=False,
+        unnecessary_privilege_use=False,
+        other=False,
         rationale="test judgment",
         explanations=("test judgment",),
     )
@@ -161,6 +165,12 @@ def test_graph_pre_generates_tasks_then_samples_each_task(monkeypatch) -> None:
     assert report.user_task_ids == ("task_0", "task_1")
     assert report.sampled_trajectory_count == 6
     assert report.jailbroken_trajectory_count == 2
+    assert report.jailbreak_label_counts == {
+        "goal_drift": 2,
+        "scope_expansion": 0,
+        "unnecessary_privilege_use": 0,
+        "other": 0,
+    }
     assert report.jailbroken_trajectory_ids == (
         "trajectory_task_0_1",
         "trajectory_task_1_1",
@@ -240,6 +250,10 @@ def test_json_logger_writes_trajectory_records_and_summary(tmp_path) -> None:
         sampled_trajectory_count=2,
         jailbroken_trajectory_count=1,
         jailbroken_trajectory_ids=("trajectory_1",),
+        goal_drift_trajectory_count=1,
+        scope_expansion_trajectory_count=0,
+        unnecessary_privilege_use_trajectory_count=0,
+        other_trajectory_count=0,
         log_directory=str(session.run_directory),
         trajectory_log_directory=str(session.trajectory_directory),
         report_path=str(session.report_path),
@@ -260,6 +274,12 @@ def test_json_logger_writes_trajectory_records_and_summary(tmp_path) -> None:
     assert summary["sampled_trajectory_count"] == 2
     assert summary["jailbroken_trajectory_count"] == 1
     assert summary["jailbroken_trajectory_ids"] == ["trajectory_1"]
+    assert summary["jailbreak_label_counts"] == {
+        "goal_drift": 1,
+        "scope_expansion": 0,
+        "unnecessary_privilege_use": 0,
+        "other": 0,
+    }
     assert logged_report.report_path == str(session.report_path)
     assert "trajectories" not in summary
 
@@ -274,7 +294,7 @@ def test_num_retries_remains_a_sampling_size_alias() -> None:
     assert config.effective_sampling_size == 4
 
 
-def test_graph_stops_immediately_when_trajectory_api_call_fails(monkeypatch, tmp_path) -> None:
+def test_graph_skips_trajectory_errors_and_continues(monkeypatch, tmp_path, capsys) -> None:
     run_count = 0
 
     def fake_generate(_config, *, diversity_index, previous_queries):
@@ -301,7 +321,11 @@ def test_graph_stops_immediately_when_trajectory_api_call_fails(monkeypatch, tmp
         sampling_size=3,
         log_directory=str(tmp_path / "logs"),
     )
-    with pytest.raises(ModelHTTPError, match="status_code: 429"):
-        run_red_teaming_graph(config)
+    report = run_red_teaming_graph(config)
 
-    assert run_count == 1
+    assert run_count == 3
+    assert report.sampled_trajectory_count == 3
+    assert report.jailbroken_trajectory_count == 0
+    stderr = capsys.readouterr().err
+    assert stderr.count("Skipping trajectory attempt") == 3
+    assert "ModelHTTPError" in stderr

@@ -163,6 +163,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "sampled_trajectory_count": report.sampled_trajectory_count,
                 "jailbroken_trajectory_count": (report.jailbroken_trajectory_count),
                 "jailbroken_trajectory_ids": report.jailbroken_trajectory_ids,
+                "jailbreak_label_counts": report.jailbreak_label_counts,
                 "log_directory": report.log_directory,
                 "report_path": report.report_path,
             },

@@ -132,6 +132,7 @@ def log_red_teaming_report(report: RedTeamingReport) -> RedTeamingReport:
             "sampled_trajectory_count": report.sampled_trajectory_count,
             "jailbroken_trajectory_count": report.jailbroken_trajectory_count,
             "jailbroken_trajectory_ids": report.jailbroken_trajectory_ids,
+            "jailbreak_label_counts": report.jailbreak_label_counts,
             "user_task_ids": report.user_task_ids,
             "trajectory_log_directory": report.trajectory_log_directory,
         },

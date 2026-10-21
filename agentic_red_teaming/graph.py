@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import enum
 import hashlib
+import sys
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
@@ -159,6 +160,10 @@ class PlanEvaluation:
     jailbreak: bool
     dramatic_deviation: bool
     unsafe_risk: bool
+    goal_drift: bool
+    scope_expansion: bool
+    unnecessary_privilege_use: bool
+    other: bool
     explanation: str
 
     def __post_init__(self) -> None:
@@ -166,6 +171,9 @@ class PlanEvaluation:
             raise ValueError("plan_index cannot be negative.")
         if self.jailbreak != (self.dramatic_deviation or self.unsafe_risk):
             raise ValueError("jailbreak must equal dramatic_deviation OR unsafe_risk.")
+        labels = (self.goal_drift, self.scope_expansion, self.unnecessary_privilege_use, self.other)
+        if self.jailbreak != any(labels):
+            raise ValueError("jailbreak must have at least one mechanism label, and safe plans must have none.")
 
 
 @dataclass(frozen=True)
@@ -177,6 +185,10 @@ class TrajectoryEvaluation:
     deviation_score: float
     deviated_from_task: bool
     unsafe_risk: bool
+    goal_drift: bool
+    scope_expansion: bool
+    unnecessary_privilege_use: bool
+    other: bool
     rationale: str
     explanations: tuple[str, ...] = ()
     unsafe_events: tuple[str, ...] = ()
@@ -188,6 +200,9 @@ class TrajectoryEvaluation:
             raise ValueError("deviation_score must be between 0.0 and 1.0.")
         if self.jailbreak != (self.deviated_from_task or self.unsafe_risk):
             raise ValueError("jailbreak must equal deviated_from_task OR unsafe_risk.")
+        labels = (self.goal_drift, self.scope_expansion, self.unnecessary_privilege_use, self.other)
+        if self.jailbreak != any(labels):
+            raise ValueError("jailbreak must have at least one mechanism label, and safe trajectories must have none.")
 
 
 @dataclass(frozen=True)
@@ -202,6 +217,10 @@ class RedTeamingReport:
     sampled_trajectory_count: int
     jailbroken_trajectory_count: int
     jailbroken_trajectory_ids: tuple[str, ...]
+    goal_drift_trajectory_count: int
+    scope_expansion_trajectory_count: int
+    unnecessary_privilege_use_trajectory_count: int
+    other_trajectory_count: int
     log_directory: str
     trajectory_log_directory: str
     report_path: str
@@ -220,12 +239,30 @@ class RedTeamingReport:
             raise ValueError("jailbroken_trajectory_ids must be unique.")
         if self.jailbroken_trajectory_count > self.sampled_trajectory_count:
             raise ValueError("jailbroken_trajectory_count cannot exceed sampled_trajectory_count.")
+        label_counts = self.jailbreak_label_counts.values()
+        if any(count < 0 for count in label_counts):
+            raise ValueError("jailbreak label counts cannot be negative.")
+        if any(count > self.jailbroken_trajectory_count for count in label_counts):
+            raise ValueError("jailbreak label counts cannot exceed jailbroken_trajectory_count.")
+        if sum(label_counts) < self.jailbroken_trajectory_count:
+            raise ValueError("every jailbroken trajectory must have at least one mechanism label.")
 
     @property
     def unsafe_trajectory_count(self) -> int:
         """Compatibility alias for the aggregate jailbreak count."""
 
         return self.jailbroken_trajectory_count
+
+    @property
+    def jailbreak_label_counts(self) -> dict[str, int]:
+        """Return overlapping trajectory counts for the jailbreak taxonomy."""
+
+        return {
+            "goal_drift": self.goal_drift_trajectory_count,
+            "scope_expansion": self.scope_expansion_trajectory_count,
+            "unnecessary_privilege_use": self.unnecessary_privilege_use_trajectory_count,
+            "other": self.other_trajectory_count,
+        }
 
 
 def _sample_selection_config(
@@ -278,46 +315,70 @@ def run_red_teaming_graph(config: RedTeamingConfig) -> RedTeamingReport:
     )
     sampled_trajectory_count = 0
     jailbroken_trajectory_ids: list[str] = []
+    goal_drift_trajectory_count = 0
+    scope_expansion_trajectory_count = 0
+    unnecessary_privilege_use_trajectory_count = 0
+    other_trajectory_count = 0
     for task_index, user_task in enumerate(user_tasks):
         for sample_index in range(config.effective_sampling_size):
-            selection_config = _sample_selection_config(
-                config,
-                task_index,
-                sample_index,
-            )
-            injection_task = select_injection_targets(
-                user_task.ground_truth,
-                selection_config,
-            )
-            trajectory = run_bstw_trajectory(
-                user_task,
-                injection_task,
-                sample_index,
-                config,
-            )
-            trajectory = log_trajectory_record(
-                log_session,
-                sampled_trajectory_count,
-                user_task,
-                injection_task,
-                trajectory,
-            )
-            evaluation = evaluate_trajectory(
-                trajectory,
-                user_task.prompt,
-                config,
-            )
-            log_trajectory_record(
-                log_session,
-                sampled_trajectory_count,
-                user_task,
-                injection_task,
-                trajectory,
-                evaluation,
-            )
-            sampled_trajectory_count += 1
-            if evaluation.jailbreak:
-                jailbroken_trajectory_ids.append(trajectory.trajectory_id)
+            try:
+                selection_config = _sample_selection_config(
+                    config,
+                    task_index,
+                    sample_index,
+                )
+                injection_task = select_injection_targets(
+                    user_task.ground_truth,
+                    selection_config,
+                )
+                trajectory = run_bstw_trajectory(
+                    user_task,
+                    injection_task,
+                    sample_index,
+                    config,
+                )
+                trajectory = log_trajectory_record(
+                    log_session,
+                    sampled_trajectory_count,
+                    user_task,
+                    injection_task,
+                    trajectory,
+                )
+                evaluation = evaluate_trajectory(
+                    trajectory,
+                    user_task.prompt,
+                    config,
+                )
+                log_trajectory_record(
+                    log_session,
+                    sampled_trajectory_count,
+                    user_task,
+                    injection_task,
+                    trajectory,
+                    evaluation,
+                )
+                if evaluation.jailbreak:
+                    jailbroken_trajectory_ids.append(trajectory.trajectory_id)
+                if evaluation.goal_drift:
+                    goal_drift_trajectory_count += 1
+                if evaluation.scope_expansion:
+                    scope_expansion_trajectory_count += 1
+                if evaluation.unnecessary_privilege_use:
+                    unnecessary_privilege_use_trajectory_count += 1
+                if evaluation.other:
+                    other_trajectory_count += 1
+            except Exception as error:
+                print(
+                    "Skipping trajectory attempt "
+                    f"task_index={task_index} sample_index={sample_index} after "
+                    f"{type(error).__name__}: {error}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            finally:
+                # Count every requested sample as attempted so the compact report
+                # remains consistent even when one trajectory is skipped.
+                sampled_trajectory_count += 1
 
     report = RedTeamingReport(
         report_id=report_id,
@@ -328,6 +389,10 @@ def run_red_teaming_graph(config: RedTeamingConfig) -> RedTeamingReport:
         sampled_trajectory_count=sampled_trajectory_count,
         jailbroken_trajectory_count=len(jailbroken_trajectory_ids),
         jailbroken_trajectory_ids=tuple(jailbroken_trajectory_ids),
+        goal_drift_trajectory_count=goal_drift_trajectory_count,
+        scope_expansion_trajectory_count=scope_expansion_trajectory_count,
+        unnecessary_privilege_use_trajectory_count=unnecessary_privilege_use_trajectory_count,
+        other_trajectory_count=other_trajectory_count,
         log_directory=str(log_session.run_directory),
         trajectory_log_directory=str(log_session.trajectory_directory),
         report_path=str(log_session.report_path),

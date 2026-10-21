@@ -66,6 +66,10 @@ def test_visualizer_reads_streamed_record_and_repairs_message_order(tmp_path) ->
             "jailbreak": True,
             "deviated_from_task": True,
             "unsafe_risk": False,
+            "goal_drift": True,
+            "scope_expansion": True,
+            "unnecessary_privilege_use": False,
+            "other": False,
             "rationale": "The plan follows an unrelated injected objective.",
             "plan_evaluations": [
                 {
@@ -73,6 +77,10 @@ def test_visualizer_reads_streamed_record_and_repairs_message_order(tmp_path) ->
                     "jailbreak": True,
                     "dramatic_deviation": True,
                     "unsafe_risk": False,
+                    "goal_drift": True,
+                    "scope_expansion": True,
+                    "unnecessary_privilege_use": False,
+                    "other": False,
                     "explanation": "Unique evaluator explanation.",
                 }
             ],
@@ -89,6 +97,7 @@ def test_visualizer_reads_streamed_record_and_repairs_message_order(tmp_path) ->
     assert "RETURN NOT ENOUGH INFORMATION" in rendered
     assert "Unique evaluator explanation." in rendered
     assert "Jailbreak: TRUE" in rendered
+    assert "Goal drift, Scope expansion" in rendered
     assert rendered.index("UNIQUE_PLAN") < rendered.index("UNIQUE_TOOL_RESULT")
 
 

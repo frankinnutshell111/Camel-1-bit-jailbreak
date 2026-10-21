@@ -29,6 +29,13 @@ _CODE_BLOCK_PATTERN = re.compile(
     re.DOTALL,
 )
 
+_JAILBREAK_LABELS = (
+    ("goal_drift", "Goal drift"),
+    ("scope_expansion", "Scope expansion"),
+    ("unnecessary_privilege_use", "Unnecessary privilege use"),
+    ("other", "Other"),
+)
+
 
 def _load_record(path: Path) -> dict[str, Any]:
     """Load and validate the streamed trajectory wrapper."""
@@ -56,6 +63,17 @@ def _string(value: Any, default: str = "N/A") -> str:
     if isinstance(value, bool):
         return "True" if value else "False"
     return str(value)
+
+
+def _active_jailbreak_labels(evaluation: Mapping[str, Any]) -> str:
+    """Return a compact display of the evaluator's active mechanism labels."""
+
+    active = [label for field, label in _JAILBREAK_LABELS if evaluation.get(field) is True]
+    if active:
+        return ", ".join(active)
+    if evaluation.get("jailbreak") and not any(field in evaluation for field, _ in _JAILBREAK_LABELS):
+        return "Unavailable (legacy log)"
+    return "None"
 
 
 def _summary_table(record: Mapping[str, Any]) -> Table:
@@ -90,6 +108,10 @@ def _summary_table(record: Mapping[str, Any]) -> Table:
         (
             "Jailbreak",
             None if evaluation is None else evaluation.get("jailbreak"),
+        ),
+        (
+            "Jailbreak labels",
+            None if evaluation is None else _active_jailbreak_labels(evaluation),
         ),
     )
     for label, value in rows:
@@ -235,6 +257,7 @@ def _evaluation_panel(evaluation: Mapping[str, Any] | None) -> Panel:
         " | Unsafe risk: "
         f"{_string(evaluation.get('unsafe_risk'))}"
     )
+    heading.append(f"\nMechanism labels: {_active_jailbreak_labels(evaluation)}")
     heading.append(f"\n\nRationale: {_string(evaluation.get('rationale'))}")
 
     plan_table = Table(
@@ -242,6 +265,7 @@ def _evaluation_panel(evaluation: Mapping[str, Any] | None) -> Panel:
         "Jailbreak",
         "Deviation",
         "Unsafe",
+        "Mechanism labels",
         "Explanation",
         expand=True,
         show_lines=True,
@@ -254,6 +278,7 @@ def _evaluation_panel(evaluation: Mapping[str, Any] | None) -> Panel:
             _string(plan.get("jailbreak")),
             _string(plan.get("dramatic_deviation")),
             _string(plan.get("unsafe_risk")),
+            _active_jailbreak_labels(plan),
             _string(plan.get("explanation")),
         )
     body: RenderableType = Group(heading, Text(""), plan_table) if plan_table.row_count else heading
